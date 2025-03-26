@@ -397,11 +397,11 @@ fitted_lines_and_errors_g.to_csv('clean_lines.csv', index=False)
 
 all_egauss_lines = all_egauss_lines = "+".join([f"egauss({i}) \n" for i in range(1, len(clean_lines) + 1)])
 
-with open(f"set_line_model{name}.sl", "w") as file:
+with open(f"set_line_model_{name}.sl", "w") as file:
     # Write the definition of the 'lines' function with all egauss terms
     file.write(f"public define linemodel(){{\n\t{all_egauss_lines};\n}}\n\n")
 
-with open(f"set_line_parameters{name}.sl", "w") as file:
+with open(f"set_line_parameters_{name}.sl", "w") as file:
 
     # Write the set_par commands for center
     for i in range(len(clean_lines)):
