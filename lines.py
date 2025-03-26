@@ -8,10 +8,7 @@ from scipy.signal import savgol_filter, find_peaks
 from scipy.stats import mode
 import sys
 
-percentile_amp = 0;# int(input("Enter value for prominence percentile (a value from 0 to 100): "))
-
-
-min_rsq = -10000
+mim_relative_power = 0.0
 
 if len(sys.argv) > 1:
     name = sys.argv[1]
@@ -40,23 +37,34 @@ def moving_average(data, window_size):
         moving_avg = moving_avg[0:-1]
 
     return moving_avg
-#................................................................................................
-def base_calculator(y):
-
-    s=[]
-    le=[]
-
-    for i in range(3,int(len(y)/3)):
-        s.append(moving_average(y, i))
-        le.append(len(moving_average(y, i)))
-
-    st=np.transpose(s)
-    base=[]
-    for i in range(len(st)):
-        base.append(min(st[i]))
-        
-    return base
     
+#................................................................................................
+
+def base_calculator(y):
+    n = len(y)
+    max_window = max(int(n/10), 3)
+    
+    values_ = np.linspace(3, max_window, 100)
+    values = np.unique([int(c) for c in values_])
+
+    
+    # Collect all valid moving averages in a list using the defined helper _moving_average
+    moving_averages = [
+        moving_average(y, i) for i in values
+        if len(moving_average(y, i)) == n
+    ]
+
+    if not moving_averages:
+        return np.array([])
+
+    # Convert list of moving averages to a 2D NumPy array and compute the minimum
+    s = np.array(moving_averages)
+    base = np.min(s, axis=0)
+    
+    # Return the element-wise minimum between base and original y
+    return np.minimum(base, y)
+    
+#................................................................................................
 def find_peaks_new(t, x):
     
     min_distance = min(np.diff(t))  # or provide the correct array for minimum distance calculation
@@ -190,7 +198,8 @@ x = x[sorted_indices]
 y = y[sorted_indices]
 sy = sy[sorted_indices]
 
-base = base_calculator(y)
+base_ = base_calculator(y)
+base = -base_calculator(-base_)
 
 new_y = np.where(y < np.array(base)*1, base, y)
 ylines = new_y-base
@@ -353,48 +362,34 @@ for i in range(len(fitted_lines_and_errors_g)):
     min_diff_positions.append(min_diff_index)
 
 base_on_line = [base[pos] for pos in min_diff_positions]
-value_on_line = [y[pos-3:pos+3] for pos in min_diff_positions]
+value_on_line = [y[pos] for pos in min_diff_positions]
 fitted_lines_and_errors_g["base_on_line"] = base_on_line
 fitted_lines_and_errors_g["value_on_line"] = value_on_line
-fitted_lines_and_errors_g["relative_amplitude"] = fitted_lines_and_errors_g.value_on_line-fitted_lines_and_errors_g.base_on_line
+fitted_lines_and_errors_g["relative_power"] = (fitted_lines_and_errors_g.value_on_line-fitted_lines_and_errors_g.base_on_line)/(fitted_lines_and_errors_g.value_on_line+fitted_lines_and_errors_g.base_on_line)
     
 #########################################################################################################
 
 
-amplitude = fitted_lines_and_errors_g.relative_amplitude
+amplitude = fitted_lines_and_errors_g.relative_power
 samplitude = fitted_lines_and_errors_g.eamplitude
 center = fitted_lines_and_errors_g.center
 scenter = fitted_lines_and_errors_g.ecenter
 sigma = fitted_lines_and_errors_g.sigma
 ssigma = fitted_lines_and_errors_g.esigma
 
-
-# Calculating area under the curve
-sqrt_2pi = np.sqrt(2 * np.pi)
-fitted_lines_and_errors_g["area"] = sqrt_2pi * amplitude * sigma
-
-# Partial derivatives for error propagation
-error_amplitude_partial = sqrt_2pi * sigma * samplitude
-error_center_partial = sqrt_2pi * amplitude * scenter
-error_sigma_partial = sqrt_2pi * amplitude / (2 * sigma)
-
-# Calculating error in area using error propagation formula
-fitted_lines_and_errors_g["delta_area"] = ((error_amplitude_partial * samplitude)**2
-                                                  + (error_center_partial * scenter)**2
-                                                  + (error_sigma_partial * ssigma)**2)**0.5
-
 #########################################################################################################
-fitted_lines_and_errors_g=fitted_lines_and_errors_g.reset_index(drop=True)
+fitted_lines_and_errors_g=fitted_lines_and_errors_g[fitted_lines_and_errors_g.relative_power>0].reset_index(drop=True)
 #########################################################################################################
-min_amp = 0.001
+#fitted_lines_and_errors_g['relative_power'] = pd.to_numeric(fitted_lines_and_errors_g['relative_power'], errors='coerce')
+#mim_relative_power = float(mim_relative_power)  # Ensure scalar type
 
 
 
-clean_lines = fitted_lines_and_errors_g#[ (fitted_lines_and_errors_g.relative_amplitude > min_amp)
+clean_lines = fitted_lines_and_errors_g#[(fitted_lines_and_errors_g.relative_power >mim_relative_power)].reset_index(drop=True)
                                         #& (fitted_lines_and_errors_g.rsq > min_rsq)].reset_index(drop=True)
 
-clean_lines = clean_lines[['center','ecenter','area','delta_area', 'sigma','esigma','amplitude' ,'eamplitude','relative_amplitude', 'rsq']]
-#clean_lines.to_csv('clean_lines.csv', index=False)
+clean_lines = clean_lines[['center','ecenter','sigma','esigma','amplitude' ,'eamplitude','relative_power', 'rsq']]
+fitted_lines_and_errors_g.to_csv('clean_lines.csv', index=False)
 
 
 ###################### OUTPUT FOR ISIS ######################################################################
@@ -431,6 +426,6 @@ with open(f"set_line_parameters{name}.sl", "w") as file:
         file.write(f"set_par(\"egauss({i+1}).sigma\", 0.0001, 1, "
                    #f"set_par(\"egauss({i+1}).sigma\", {clean_lines['sigma'].iloc[i]}, 0, "
                    f"{0}, "
-                   f"{0.005});\n")
+                   f"{0.01});\n")
                    #f"{min(clean_lines['sigma'].iloc[i] + clean_lines['esigma'].iloc[i],0.15)});\n")
 

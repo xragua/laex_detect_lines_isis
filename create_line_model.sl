@@ -75,6 +75,7 @@ public define fit_line_model(evalfun) {
     vmessage("number of line candidates detected: %i", num);
     
     for (i = 1; i < num+1; i++) {
+        vmessage("iteration number %f of %f",i,num);
     
         variable p = get_params();
         variable stat = test_params(p, evalfun);
@@ -91,23 +92,22 @@ public define fit_line_model(evalfun) {
         variable new_p = get_params();
         variable new_stat = test_params(new_p, evalfun);
         
-        vmessage("stat: %f", stat);
+        
         vmessage("next stat: %f", new_stat);
         
-        if (new_stat < stat) {
-            vmessage("Line acepted");
-        
+        if (new_stat < stat-0.005) {
+            vmessage("line accepted");
+
             best_stat = new_stat;
             best_p = new_p;
             set_params(new_p);
-            %freeze(paramName_sigma);
-        }
+            }
         else{
             set_par(paramName_area, 0);
             freeze(paramName_area);
             freeze(paramName_sigma);
             freeze(paramName_center);
-        }
+            }
     }
     
 
