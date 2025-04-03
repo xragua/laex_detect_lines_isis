@@ -8,7 +8,7 @@ from scipy.signal import savgol_filter, find_peaks
 from scipy.stats import mode
 import sys
 
-mim_relative_power = 0.0
+mim_relative_power = 0.001
 
 if len(sys.argv) > 1:
     name = sys.argv[1]

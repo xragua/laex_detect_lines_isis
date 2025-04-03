@@ -38,6 +38,7 @@ private define test_params (particle, evalfun)
     nbins = info.num_bins;
     free_pars = info.num_variable_params;
     chisquared = info.statistic / (nbins - free_pars);
+    
     return chisquared;            % Return reduced chi-square
 }
 
@@ -57,7 +58,7 @@ public define create_line_model(name) {
 }
 
     
-public define fit_line_model(evalfun) {
+public define fit_line_model(evalfun,threshold) {
 
     () = evalfile("set_line_parameters.sl");
 
@@ -95,7 +96,7 @@ public define fit_line_model(evalfun) {
         
         vmessage("next stat: %f", new_stat);
         
-        if (new_stat < stat-0.005) {
+        if (new_stat < stat-threshold) {
             vmessage("line accepted");
 
             best_stat = new_stat;

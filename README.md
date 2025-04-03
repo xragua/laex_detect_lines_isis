@@ -14,19 +14,19 @@ This repository contains a set of functions designed for detecting and fitting G
   - `evalfile("set_line_model.sl")`: Executes a secondary script to set the line model.
 - **Output**: The lines are saved in the model, and a message is displayed indicating that the lines have been saved. This model, named **linemodel**, is ready to be used within other model components.
 
-#### `fit_line_model(evalfun)`
-- **Purpose**: Fits a line model to the data by iterating through multiple candidate Gaussian models, adjusting the parameters to minimize the chi-square statistic.
+#### `fit_line_model(evalfun, threshold)`
+- **Purpose**: Fits a line model to the data by iterating through multiple candidate Gaussian models, adjusting the parameters to minimize the chi-square statistic. The emission lines acepted are those that al least improve the reduced chi-square by the threshold proposed.
 - **Key Elements**:
   - `how_many_gaussian()`: Determines how many Gaussian components are required for the model.
   - `get_params()`: Retrieves the parameters for fitting the model.
   - `test_params(p, evalfun)`: Evaluates the chi-square statistic for the current set of parameters.
   - `thaw` and `freeze`: These functions control whether certain parameters are allowed to vary or are fixed during the fitting process.
-- **Returns**: The function sets the parameters of the best-fitting model after iterating and finding the model with the lowest chi-square statistic. Only emission lines which improve the χ² statistic by 0.005 are kept as reliable candidates.
+- **Returns**: The function sets the parameters of the best-fitting model after iterating and finding the model with the lowest chi-square statistic. 
 
 ## Workflow
 
 1. **`create_line_model(name)`** generates and saves an initial line model using Python scripts.
-2. **`fit_line_model(evalfun)`** iterates through potential models, adjusting parameters (such as area, sigma, and center of Gaussians), and selects the best model based on the reduced chi-square statistic.
+2. **`fit_line_model(evalfun, threshold)`** iterates through potential models, adjusting parameters (such as area, sigma, and center of Gaussians), and selects the best model based on the reduced chi-square statistic acepting as line candidates those that al least improve the reduced chi-square by the threshold proposed.
 
 The functions make use of system commands, Python scripts, and chi-square evaluations to fit the best Gaussian line model to the data.
 
@@ -66,7 +66,7 @@ The functions make use of system commands, Python scripts, and chi-square evalua
 5. We fit our lines. Several line candidates are suggested, but only those which improve the fit by an absolute value of χ² = 0.005 are kept as free parameters, with an area different than 0:
 
     ```isis
-    isis> fit_line_model(&eval_counts);
+    isis> fit_line_model(&eval_counts,0.003);
     ```
 
 6. Once we are satisfied, we save our model as usual:
@@ -75,7 +75,7 @@ The functions make use of system commands, Python scripts, and chi-square evalua
     isis> save_par("example_model.par");
     ```
 
-### Recover our model example:
+### Recover our saved model example:
 
 1. We should enter ISIS as usual, and first, we should require the saved **linemodel**:
 
