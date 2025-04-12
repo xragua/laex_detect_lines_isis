@@ -26,7 +26,7 @@ This repository contains a set of functions designed for detecting and fitting G
 ## Workflow
 
 1. **`create_line_model(name)`** generates and saves an initial line model using Python scripts.
-2. **`fit_line_model(evalfun, threshold)`** iterates through potential models, adjusting parameters (such as area, sigma, and center of Gaussians), and selects the best model based on the reduced chi-square statistic acepting as line candidates those that al least improve the reduced chi-square by the threshold proposed.
+2. **`fit_line_model(evalfun, threshold, max_lines)`** iterates through potential line candidates, adjusting parameters (such as area, sigma, and center of Gaussians), and selects the best model based on the reduced chi-square statistic acepting as line candidates those that al least improve the reduced chi-square by the threshold proposed. The lines will be tested by decreasing amplitud (line candidates with higher amplitude will be tested earlier) and the maximun number of lines to test should be provided by **max_lines**. The number of lines to be tested would be the minimun between the number of line candidates detected and the **max_lines** provided.
 
 The functions make use of system commands, Python scripts, and chi-square evaluations to fit the best Gaussian line model to the data.
 

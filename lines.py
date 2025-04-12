@@ -19,6 +19,29 @@ else:
 
 # HELPER FUNCTIONS
 #................................................................................................
+def contains_keV(filename):
+    """
+    Check if the file contains the string '(keV)'.
+
+    Args:
+        filename (str): Path to the ASCII text file.
+
+    Returns:
+        bool: True if '(keV)' is found, False otherwise.
+    """
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            for line in file:
+                if '(keV)' in line:
+                    return True
+        return False
+    except FileNotFoundError:
+        print(f"File not found: {filename}")
+        return False
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return False
+#................................................................................................
 def moving_average(data, window_size):
     pad_width = window_size // 2
 
@@ -65,7 +88,7 @@ def base_calculator(y):
     return np.minimum(base, y)
     
 #................................................................................................
-def find_peaks_new(t, x):
+def find_peaks_new(t, x, j):
     
     min_distance = min(np.diff(t))  # or provide the correct array for minimum distance calculation
 
@@ -185,7 +208,7 @@ def p0_generator(x,y,good_peaks_dataframe):
 
 
 spectra = pd.read_csv(r"spec_0.dat", sep="\\s+",  comment="#", header=None, engine='python')
-
+is_kev = contains_keV(r"spec_0.dat")
 
 #FIND LINE CANDIDATES
 x = np.array((spectra[0]+spectra[1])/2)
@@ -198,8 +221,8 @@ x = x[sorted_indices]
 y = y[sorted_indices]
 sy = sy[sorted_indices]
 
-base_ = base_calculator(y)
-base = -base_calculator(-base_)
+base = base_calculator(y)
+#base = -base_calculator(-base_)
 
 new_y = np.where(y < np.array(base)*1, base, y)
 ylines = new_y-base
@@ -292,7 +315,7 @@ ncols = 6  # Number of columns per row
 
 fitted_lines_and_errors_g = pd.DataFrame(columns=['amplitude','center','sigma',
                                                   'eamplitude','ecenter','esigma',
-                                                  'rsq'])
+                                                  'rsq','number_block'])
 z=0
 
 for j in range(len(xblocks)):
@@ -306,7 +329,7 @@ for j in range(len(xblocks)):
         
         res_dif = 0.001
 
-        p = find_peaks_new(xblock, yblock)
+        p = find_peaks_new(xblock, yblock, j)
         
         
         if len(p)>0:
@@ -345,7 +368,7 @@ for j in range(len(xblocks)):
 
                     for k in range(len(good_peaks)):
                         
-                        new_line = np.concatenate([popt_[k],errors_[k],[rsq]])
+                        new_line = np.concatenate([popt_[k],errors_[k],[rsq],[j]])
 
                         fitted_lines_and_errors_g.loc[z] = np.concatenate([new_line])
                         z=z+1
@@ -378,54 +401,88 @@ sigma = fitted_lines_and_errors_g.sigma
 ssigma = fitted_lines_and_errors_g.esigma
 
 #########################################################################################################
-fitted_lines_and_errors_g=fitted_lines_and_errors_g[fitted_lines_and_errors_g.relative_power>0].reset_index(drop=True)
-#########################################################################################################
-#fitted_lines_and_errors_g['relative_power'] = pd.to_numeric(fitted_lines_and_errors_g['relative_power'], errors='coerce')
-#mim_relative_power = float(mim_relative_power)  # Ensure scalar type
+
+# Step 1: Filter
+clean_lines = fitted_lines_and_errors_g[fitted_lines_and_errors_g['relative_power'] > 0].sort_values(by='amplitude', ascending=False).reset_index(drop=True)
 
 
 
-clean_lines = fitted_lines_and_errors_g#[(fitted_lines_and_errors_g.relative_power >mim_relative_power)].reset_index(drop=True)
-                                        #& (fitted_lines_and_errors_g.rsq > min_rsq)].reset_index(drop=True)
-
-clean_lines = clean_lines[['center','ecenter','sigma','esigma','amplitude' ,'eamplitude','relative_power', 'rsq']]
-fitted_lines_and_errors_g.to_csv('clean_lines.csv', index=False)
+clean_lines = clean_lines[['center','ecenter','sigma','esigma','amplitude' ,'eamplitude','relative_power', 'rsq','number_block']]
+clean_lines.to_csv('clean_lines.csv', index=False)
 
 
 ###################### OUTPUT FOR ISIS ######################################################################
 
+if is_kev:
 
-all_egauss_lines = all_egauss_lines = "+".join([f"egauss({i}) \n" for i in range(1, len(clean_lines) + 1)])
+    all_egauss_lines = all_egauss_lines = "+".join([f"egauss({i}) \n" for i in range(1, len(clean_lines) + 1)]  )
 
-with open(f"set_line_model_{name}.sl", "w") as file:
-    # Write the definition of the 'lines' function with all egauss terms
-    file.write(f"public define linemodel(){{\n\t{all_egauss_lines};\n}}\n\n")
+    with open(f"set_line_model_{name}.sl", "w") as file:
+        # Write the definition of the 'lines' function with all egauss terms
+        file.write(f"public define linemodel(){{\n\t{all_egauss_lines};\n}}\n\n")
 
-with open(f"set_line_parameters_{name}.sl", "w") as file:
+    with open(f"set_line_parameters_{name}.sl", "w") as file:
 
-    # Write the set_par commands for center
-    for i in range(len(clean_lines)):
-        file.write(f"set_par(\"egauss({i+1}).center\", {clean_lines['center'].iloc[i]}, 1, "
-                   f"{max(clean_lines['center'].iloc[i] - 2*clean_lines['ecenter'].iloc[i], 0)}, "
-                   f"{clean_lines['center'].iloc[i] + 2*clean_lines['ecenter'].iloc[i]});\n")
+        # Write the set_par commands for center
+        for i in range(len(clean_lines)):
+            file.write(f"set_par(\"egauss({i+1}).center\", {clean_lines['center'].iloc[i]}, 1, "
+                       f"{max(clean_lines['center'].iloc[i] - 2*clean_lines['ecenter'].iloc[i], 0)}, "
+                       f"{clean_lines['center'].iloc[i] + 2*clean_lines['ecenter'].iloc[i]});\n")
 
-    file.write("\n")
+        file.write("\n")
 
-    # Write the set_par commands for area
-    for i in range(len(clean_lines)):
-        #file.write(f"set_par(\"egauss({i+1}).area\", {clean_lines['area'].iloc[i]}, 0, "
-        file.write(f"set_par(\"egauss({i+1}).area\", 0, 1, "
-                   f"{0}, "
-                   f"{100000000});\n")
+        # Write the set_par commands for area
+        for i in range(len(clean_lines)):
+            #file.write(f"set_par(\"egauss({i+1}).area\", {clean_lines['area'].iloc[i]}, 0, "
+            file.write(f"set_par(\"egauss({i+1}).area\", 0, 1, "
+                       f"{0}, "
+                       f"{100000000});\n")
 
-    file.write("\n")
+        file.write("\n")
 
-    # Write the set_par commands for sigma
-    for i in range(len(clean_lines)):
-        #file.write(f"set_par(\"egauss({i+1}).sigma\", {clean_lines['sigma'].iloc[i]}, 0, "
-        file.write(f"set_par(\"egauss({i+1}).sigma\", 0.0001, 1, "
-                   #f"set_par(\"egauss({i+1}).sigma\", {clean_lines['sigma'].iloc[i]}, 0, "
-                   f"{0}, "
-                   f"{0.01});\n")
-                   #f"{min(clean_lines['sigma'].iloc[i] + clean_lines['esigma'].iloc[i],0.15)});\n")
+        # Write the set_par commands for sigma
+        for i in range(len(clean_lines)):
+            #file.write(f"set_par(\"egauss({i+1}).sigma\", {clean_lines['sigma'].iloc[i]}, 0, "
+            file.write(f"set_par(\"egauss({i+1}).sigma\", 0.0001, 1, "
+                       #f"set_par(\"egauss({i+1}).sigma\", {clean_lines['sigma'].iloc[i]}, 0, "
+                       f"{0}, "
+                       f"{0.01});\n")
+                       #f"{min(clean_lines['sigma'].iloc[i] + clean_lines['esigma'].iloc[i],0.15)});\n")
+
+
+if not is_kev:
+
+    all_gauss_lines = all_gauss_lines = "+".join([f"gauss({i}) \n" for i in range(1, len(clean_lines) + 1)])
+
+    with open(f"set_line_model_{name}.sl", "w") as file:
+        # Write the definition of the 'lines' function with all gauss terms
+        file.write(f"public define linemodel(){{\n\t{all_gauss_lines};\n}}\n\n")
+
+    with open(f"set_line_parameters_{name}.sl", "w") as file:
+
+        # Write the set_par commands for center
+        for i in range(len(clean_lines)):
+            file.write(f"set_par(\"gauss({i+1}).center\", {clean_lines['center'].iloc[i]}, 1, "
+                       f"{max(clean_lines['center'].iloc[i] - 2*clean_lines['ecenter'].iloc[i], 0)}, "
+                       f"{clean_lines['center'].iloc[i] + 2*clean_lines['ecenter'].iloc[i]});\n")
+
+        file.write("\n")
+
+        # Write the set_par commands for area
+        for i in range(len(clean_lines)):
+            #file.write(f"set_par(\"gauss({i+1}).area\", {clean_lines['area'].iloc[i]}, 0, "
+            file.write(f"set_par(\"gauss({i+1}).area\", 0, 1, "
+                       f"{0}, "
+                       f"{100000000});\n")
+
+        file.write("\n")
+
+        # Write the set_par commands for sigma
+        for i in range(len(clean_lines)):
+            #file.write(f"set_par(\"gauss({i+1}).sigma\", {clean_lines['sigma'].iloc[i]}, 0, "
+            file.write(f"set_par(\"gauss({i+1}).sigma\", 0.0001, 1, "
+                       #f"set_par(\"gauss({i+1}).sigma\", {clean_lines['sigma'].iloc[i]}, 0, "
+                       f"{0}, "
+                       f"{0.01});\n")
+                       #f"{min(clean_lines['sigma'].iloc[i] + clean_lines['esigma'].iloc[i],0.15)});\n")
 

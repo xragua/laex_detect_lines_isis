@@ -31,6 +31,7 @@ public define how_many_gaussian ()
 
 private define test_params (particle, evalfun)
 {
+    %set_fit_statistic("cash");
     variable info, nbins, free_pars, chisquared;
     set_params(particle);         % Apply particle parameters to the system
     () = @evalfun(&info);         % Evaluate; evalfun fills in 'info'
@@ -53,16 +54,22 @@ public define create_line_model(name) {
     cmd = "python " + MODEL_DIR + "/lines.py";
     system(cmd);
     
-    () = evalfile("set_line_model.sl");
+    () = evalfile("set_line_model_.sl");
     vmessage("Lines saved in model under name linemodel");
 }
 
     
-public define fit_line_model(evalfun,threshold) {
+public define fit_line_model(evalfun,threshold,max_lines) {
 
-    () = evalfile("set_line_parameters.sl");
+    () = evalfile("set_line_parameters_.sl");
 
     variable num = how_many_gaussian();
+    
+    if (num>max_lines){
+        num=max_lines;
+        vmessage("Trying to fit");
+    }
+
     
     if (num <= 0) {
        vmessage("Invalid number of gaussians: %i", num);
@@ -74,6 +81,7 @@ public define fit_line_model(evalfun,threshold) {
 
     variable i;
     vmessage("number of line candidates detected: %i", num);
+    
     
     for (i = 1; i < num+1; i++) {
         vmessage("iteration number %f of %f",i,num);
