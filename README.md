@@ -1,40 +1,19 @@
 # laex_detect_lines_isis
 
-This repository contains a set of functions designed for detecting and fitting Gaussian emission lines in x-ray spectra with ISIS. The code provides functions to define parameters, evaluate models, and fit Gaussian lines to the data based on a chi-square minimization approach. This function operates in keV, and requires ISISSCIPTS and Python to be properly set up in your environment.
+We created a tool for ISIS that allows to authomatically add emisison lines in the spectra. This module requires **isissscripts**.
 
-## Functions Overview
 
-### Public Functions
-
-#### `create_line_model(name)`
-- **Purpose**: Generates a line model using Python scripts and saves it under a specified name.
-- **Key Elements**:
-  - `write_plot("spec")`: Writes the plot to a file.
-  - `system(cmd)`: Executes the Python script `lines.py` to generate a model.
-  - `evalfile("set_line_model.sl")`: Executes a secondary script to set the line model.
-- **Output**: The lines are saved in the model, and a message is displayed indicating that the lines have been saved. This model, named **linemodel**, is ready to be used within other model components.
-
-#### `fit_line_model(evalfun, threshold)`
-- **Purpose**: Fits a line model to the data by iterating through multiple candidate Gaussian models, adjusting the parameters to minimize the chi-square statistic. The emission lines acepted are those that al least improve the reduced chi-square by the threshold proposed.
-- **Key Elements**:
-  - `how_many_gaussian()`: Determines how many Gaussian components are required for the model.
-  - `get_params()`: Retrieves the parameters for fitting the model.
-  - `test_params(p, evalfun)`: Evaluates the chi-square statistic for the current set of parameters.
-  - `thaw` and `freeze`: These functions control whether certain parameters are allowed to vary or are fixed during the fitting process.
-- **Returns**: The function sets the parameters of the best-fitting model after iterating and finding the model with the lowest chi-square statistic. 
-
-## Workflow
+### Workflow
 
 1. **`create_line_model(name)`** generates and saves an initial line model using Python scripts.
-2. **`fit_line_model(evalfun, threshold, max_lines)`** iterates through potential line candidates, adjusting parameters (such as area, sigma, and center of Gaussians), and selects the best model based on the reduced chi-square statistic acepting as line candidates those that al least improve the reduced chi-square by the threshold proposed. The lines will be tested by decreasing amplitud (line candidates with higher amplitude will be tested earlier) and the maximun number of lines to test should be provided by **max_lines**. The number of lines to be tested would be the minimun between the number of line candidates detected and the **max_lines** provided.
+
+2. **`fit_line_model(evalfun, threshold, max_lines)`** iterates through potential line candidates, adjusting parameters (such as area, sigma, and center of Gaussians), and selects the best model based on the reduced chi-square statistic acepting as line candidates those that al least improve the reduced chi-square by the threshold proposed. The lines will be tested by decreasing amplitud (line candidates with higher amplitude will be tested earlier) and the maximun number of lines to test should be provided by **max_lines**. The number of lines to be tested would be the minimun between the number of line candidates detected and the **max_lines** provided. Emission lines will be added to the continum and added to the model
 
 The functions make use of system commands, Python scripts, and chi-square evaluations to fit the best Gaussian line model to the data.
 
-## Use example with ISIS:
+### Use example with ISIS:
 
-### Detect line example:
-
-1. We should save the files **create_line_model.sl** and **lines.py** in the same folder, for example, under the desired name (in this example, the folder is named **detect_lines_isis**) in our local models directory and indicate the path when we enter ISIS:
+1. Download and save scripts in https://github.com/xragua/bliss/tree/main/bliss_for_isis in MODEL_DIR. Enter in ISIS and load the required scripts.
 
     ```isis
     isis> require("isisscripts.sl")
@@ -57,7 +36,7 @@ The functions make use of system commands, Python scripts, and chi-square evalua
     isis> create_line_model("test");
     ```
 
-4. We define our complete model:
+4. We define our complete model, as an example, that could be:
 
     ```isis
     isis> fit_fun("(tbnew(1)+constant(1)*tbnew(2))*(powerlaw(1)+bbody(1)+bbody(2)+linemodel)");
@@ -66,7 +45,7 @@ The functions make use of system commands, Python scripts, and chi-square evalua
 5. We fit our lines. Several line candidates are suggested, but only those which improve the fit by an absolute value of χ² = 0.005 are kept as free parameters, with an area different than 0:
 
     ```isis
-    isis> fit_line_model(&eval_counts,0.003);
+    isis> fit_line_model(&eval_counts,0.005,10);
     ```
 
 6. Once we are satisfied, we save our model as usual:
@@ -77,19 +56,11 @@ The functions make use of system commands, Python scripts, and chi-square evalua
 
 ### Recover our saved model example:
 
-1. We should enter ISIS as usual, and first, we should require the saved **linemodel**:
-
-    ```isis
-    isis> require("set_line_model_test.sl");
-    ```
-
-2. We now load and recover the complete model:
+1. We recover the complete model as ususal:
 
     ```isis
     isis> load_par("example_model.par");
     ```
-
-In case that we load them in the inverse order, the message "linemodel is undefined" will appear. We then must require our line model and load again.
 
 ## License
 

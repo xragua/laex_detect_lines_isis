@@ -16,16 +16,23 @@ private define get_params ()
    return p;
 }
 
-public define how_many_gaussian ()
+public define  how_many_gaussian ()
 {
-    variable n, info_par, last_gaussian, num;
-    n = get_num_pars();
-    info_par = get_par_info(n);
-    last_gaussian = info_par.name;
+    variable n = get_num_pars();
+    variable i, info, k, matched, last = 0;
 
-    sscanf(last_gaussian, "egauss(%d).area", &num);
+    for (i = 1; i <= n; i++)
+      {
+         info = get_par_info(i);
 
-    return num;
+         % Try to extract k from any egauss(k).<anything>
+         matched = sscanf(info.name, "egauss(%d).%*s", &k);
+
+         if (matched == 1 && k > last)
+            last = k;
+      }
+
+    return last;   % 0 means: no egauss components found
 }
 
 
@@ -121,5 +128,11 @@ public define fit_line_model(evalfun,threshold,max_lines) {
     
 
   set_params(best_p);
+  
+  variable cmd;
+  save_par("raw_model.par");
+  cmd = "python " + MODEL_DIR + "/clean_egauss.py raw_model.par clean_model.par";
+  system(cmd);
+  load_par("clean_model.par");
 
 }

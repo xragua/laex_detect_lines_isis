@@ -8,7 +8,6 @@ from scipy.signal import savgol_filter, find_peaks
 from scipy.stats import mode
 import sys
 
-mim_relative_power = 0.001
 
 if len(sys.argv) > 1:
     name = sys.argv[1]
@@ -60,7 +59,9 @@ def moving_average(data, window_size):
         moving_avg = moving_avg[0:-1]
 
     return moving_avg
-    
+
+#................................................................................................
+
 #................................................................................................
 
 def base_calculator(y):
@@ -302,7 +303,6 @@ for i in range(len(blocks)):
             yblocks[i] = yblocks[i][:j]
             syblocks[i] = syblocks[i][:j]
 
-            
             contblocks[i] = contblocks[i][:j]
             
             break  # Exit the inner loop once consecutive zeros are removed
@@ -311,7 +311,6 @@ for i in range(len(blocks)):
 
 nrows = int(len(blocks) / 6) # Calculate number of rows based on 6 columns
 ncols = 6  # Number of columns per row
-
 
 fitted_lines_and_errors_g = pd.DataFrame(columns=['amplitude','center','sigma',
                                                   'eamplitude','ecenter','esigma',
@@ -406,9 +405,23 @@ ssigma = fitted_lines_and_errors_g.esigma
 clean_lines = fitted_lines_and_errors_g[fitted_lines_and_errors_g['relative_power'] > 0].sort_values(by='amplitude', ascending=False).reset_index(drop=True)
 
 
-
 clean_lines = clean_lines[['center','ecenter','sigma','esigma','amplitude' ,'eamplitude','relative_power', 'rsq','number_block']]
 clean_lines.to_csv('clean_lines.csv', index=False)
+
+
+save_row = {
+    'center': 100000000.0,
+    'ecenter': 0.,
+    'sigma': 0.,
+    'esigma': 0.0,
+    'amplitude': 0,
+    'eamplitude': 0,
+    'relative_power': 0,
+    'rsq': 0,
+    'number_block': -10
+}
+
+clean_lines.loc[len(clean_lines)] = save_row
 
 
 ###################### OUTPUT FOR ISIS ######################################################################
