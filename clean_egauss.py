@@ -11,14 +11,20 @@ What it does:
 - Renumbers the remaining egauss indices in ascending order starting from 1
 - Renumbers the leading "idx" column sequentially starting at 1
 - Preserves column formatting as closely as practical
+- Then: loads clean_lines.csv, adds "stat_diff" column from stat_diff.txt,
+  padding the rest with NaN, and writes clean_lines_with_statdiff.csv
 """
 import sys
 import re
 from pathlib import Path
 
+import pandas as pd
+import numpy as np
+
 AREA_RE = re.compile(r'(egauss\()\s*(\d+)\s*(\)\.area)')
 CENTER_RE = re.compile(r'(egauss\()\s*(\d+)\s*(\)\.center)')
 SIGMA_RE = re.compile(r'(egauss\()\s*(\d+)\s*(\)\.sigma)')
+
 
 def parse_float_safe(s: str):
     try:
@@ -26,8 +32,10 @@ def parse_float_safe(s: str):
     except Exception:
         return None
 
+
 def is_egauss_area(line: str):
     return bool(AREA_RE.search(line))
+
 
 def get_area_value(line: str):
     """
@@ -36,19 +44,17 @@ def get_area_value(line: str):
     We need the 5th column (value). We'll split by whitespace and read the column positions:
     idx  name  tie  freeze  value  min  max  [unit]
     """
-    # Collapse multiple spaces, but we must be careful not to lose units.
     parts = line.strip().split()
-    # We expect at least 7 columns before unit; if unit exists it's 8+
     if len(parts) < 7:
         return None
     # parts[0]=idx, parts[1]=name, parts[2]=tie-to, parts[3]=freeze, parts[4]=value
     return parse_float_safe(parts[4])
 
+
 def renumber_idx_column(lines):
-    """Rewrite the first numeric column (idx) to be 1..N, preserving right alignment width (3 digits or more)."""
+    """Rewrite the first numeric column (idx) to be 1..N, preserving right alignment."""
     out = []
     idx_counter = 1
-    idx_field_width = 3  # observed in sample
     for line in lines:
         m = re.match(r'\s*\d+\s+(.*)$', line)
         if not m:
@@ -58,6 +64,7 @@ def renumber_idx_column(lines):
         out.append(f"{idx_counter:4d}  {rest}")
         idx_counter += 1
     return out
+
 
 def main(inp: Path, outp: Path):
     text = inp.read_text(encoding="utf-8", errors="replace")
@@ -72,10 +79,8 @@ def main(inp: Path, outp: Path):
     header1 = lines[1]
     body = lines[2:]
 
-    # Walk through body; identify egauss triplets and decide whether to keep them.
     kept_lines = []
     i = 0
-    # We'll also track renumber mapping old_index -> new_index
     old_to_new = {}
     next_egauss_index = 1
 
@@ -84,18 +89,17 @@ def main(inp: Path, outp: Path):
         if is_egauss_area(line):
             # Expect the following two lines to be center and sigma with the same index
             if i + 2 >= len(body):
-                # malformed; just keep as-is
                 kept_lines.append(line)
                 i += 1
                 continue
-            area_line = body[i]
-            center_line = body[i+1]
-            sigma_line = body[i+2]
 
-            # Check they belong to the same egauss index
+            area_line = body[i]
+            center_line = body[i + 1]
+            sigma_line = body[i + 2]
+
             ma = AREA_RE.search(area_line)
-            mc = CENTER_RE.search(center_line) if CENTER_RE.search(center_line) else None
-            ms = SIGMA_RE.search(sigma_line) if SIGMA_RE.search(sigma_line) else None
+            mc = CENTER_RE.search(center_line)
+            ms = SIGMA_RE.search(sigma_line)
 
             same_index = False
             if ma and mc and ms:
@@ -106,19 +110,21 @@ def main(inp: Path, outp: Path):
 
             if same_index:
                 val = get_area_value(area_line)
-                if val is not None and abs(val) == 0.0:
-                    # Drop this triplet
+
+                # Drop triplet if area is exactly zero (the ones we froze in ISIS)
+                if val is not None and val == 0.0:
                     i += 3
                     continue
                 else:
-                    # Keep this triplet but rewrite egauss(index) to new contiguous index
                     old_idx = int(ma.group(2))
                     new_idx = next_egauss_index
                     next_egauss_index += 1
                     old_to_new[old_idx] = new_idx
 
                     def renumber_line(l, pat):
-                        return pat.sub(lambda m: f"{m.group(1)}{new_idx}{m.group(3)}", l)
+                        return pat.sub(
+                            lambda m: f"{m.group(1)}{new_idx}{m.group(3)}", l
+                        )
 
                     kept_lines.append(renumber_line(area_line, AREA_RE))
                     kept_lines.append(renumber_line(center_line, CENTER_RE))
@@ -126,7 +132,6 @@ def main(inp: Path, outp: Path):
                     i += 3
                     continue
             else:
-                # Not a well-formed triplet; just keep and move forward
                 kept_lines.append(line)
                 i += 1
                 continue
@@ -134,22 +139,40 @@ def main(inp: Path, outp: Path):
             kept_lines.append(line)
             i += 1
 
-    # Now renumber the idx column from 1..N within the body
+    # Renumber idx column in the body
     body_renumbered = renumber_idx_column(kept_lines)
 
-    # Build new header with all remaining egauss components explicitly
+    # Rebuild header0 with the remaining egauss components
     area_pat = re.compile(r'egauss\((\d+)\)\.area')
-    idxs = sorted({int(m.group(1)) for m in map(lambda mm: re.search(area_pat, mm), kept_lines) if m})
+    idxs = sorted(
+        {
+            int(m.group(1))
+            for m in map(lambda mm: re.search(area_pat, mm), kept_lines)
+            if m
+        }
+    )
     if idxs:
         egauss_terms = "+".join(f"egauss({i})" for i in idxs)
         header0 = f"tbnew(1)*(powerlaw(1)+{egauss_terms})"
     else:
         header0 = "tbnew(1)*(powerlaw(1))"
 
-
-    # Reassemble
     final_lines = [header0, header1] + body_renumbered
     outp.write_text("\n".join(final_lines) + "\n", encoding="utf-8")
+
+    # ---- pandas / stat_diff part ----
+    try:
+        df = pd.read_csv("clean_lines.csv")
+        stat_diff = np.loadtxt("stat_diff.txt")
+    except FileNotFoundError as e:
+        print(f"Warning: {e}. Skipping CSV/stat_diff update.")
+        return
+
+    df["stat_diff"] = np.nan
+    n = len(stat_diff)
+    df.loc[: n - 1, "stat_diff"] = stat_diff
+    df.to_csv("clean_lines.csv", index=False)
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -158,3 +181,16 @@ if __name__ == "__main__":
     inp = Path(sys.argv[1])
     outp = Path(sys.argv[2])
     main(inp, outp)
+
+
+# Files you want to delete
+to_delete = [
+    "raw_model.par",
+    "spec_0.dat",
+    "set_line_parameters_.sl",
+    "set_line_model_.sl",   # if you also want this removed
+    "stat_diff.txt"     # only if you want to remove this too
+]
+
+for fname in to_delete:
+    Path(fname).unlink(missing_ok=True)

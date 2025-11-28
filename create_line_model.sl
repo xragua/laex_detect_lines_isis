@@ -65,6 +65,8 @@ public define create_line_model(name) {
     vmessage("Lines saved in model under name linemodel");
 }
 
+
+
     
 public define fit_line_model(evalfun,threshold,max_lines) {
 
@@ -82,6 +84,9 @@ public define fit_line_model(evalfun,threshold,max_lines) {
        vmessage("Invalid number of gaussians: %i", num);
        return;
     }
+    
+    % Preallocate array to store stat - threshold for each iteration
+    variable stat_diff = Double_Type[num];
     
     variable best_p = get_params();
     variable best_stat = 1.0e99;
@@ -108,8 +113,11 @@ public define fit_line_model(evalfun,threshold,max_lines) {
         variable new_p = get_params();
         variable new_stat = test_params(new_p, evalfun);
         
+        % store this iteration's value:
+        stat_diff[i-1] = new_stat - best_stat;   % or stat - threshold
         
-        vmessage("next stat: %f", new_stat);
+        vmessage("next stat: %f", best_stat);
+        
         
         if (new_stat < stat-threshold) {
             vmessage("line accepted");
@@ -125,8 +133,17 @@ public define fit_line_model(evalfun,threshold,max_lines) {
             freeze(paramName_center);
             }
     }
-    
+  % Save staff diff for each line----------------
+  variable fp = fopen("stat_diff.txt", "w");
+  variable t;
 
+  for (t = 0; t < length(stat_diff); t++) {
+    fprintf(fp, "%g\n", stat_diff[t]);
+  }
+
+  fclose(fp);
+  %----------------------------------------------
+  
   set_params(best_p);
   
   variable cmd;
