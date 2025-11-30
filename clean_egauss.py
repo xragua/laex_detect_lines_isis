@@ -142,7 +142,7 @@ def main(inp: Path, outp: Path):
     # Renumber idx column in the body
     body_renumbered = renumber_idx_column(kept_lines)
 
-    # Rebuild header0 with the remaining egauss components
+    # ---- Rebuild header0 using raw_model.par template ----
     area_pat = re.compile(r'egauss\((\d+)\)\.area')
     idxs = sorted(
         {
@@ -151,11 +151,37 @@ def main(inp: Path, outp: Path):
             if m
         }
     )
-    if idxs:
-        egauss_terms = "+".join(f"egauss({i})" for i in idxs)
-        header0 = f"tbnew(1)*(powerlaw(1)+{egauss_terms})"
+
+    # Read first line of raw_model.par, e.g.
+    # (tbnew(1)+constant(1)*tbnew(2))*(powerlaw(1)+bbody(1)+bbody(2)+linemodel)
+    raw_model_path = Path("raw_model.par")
+    if raw_model_path.exists():
+        base_header0 = raw_model_path.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()[0].strip()
     else:
-        header0 = "tbnew(1)*(powerlaw(1))"
+        # Fallback to whatever was in the original header0
+        base_header0 = header0
+
+    if idxs:
+        # Build the line model as a sum of the surviving egauss components
+        line_model = "+".join(f"egauss({i})" for i in idxs)
+        if "linemodel" in base_header0:
+            header0 = base_header0.replace("linemodel", line_model)
+        else:
+            # If for some reason there's no 'linemodel' token, just keep base_header0
+            header0 = base_header0
+    else:
+        # No gaussians left: drop 'linemodel' term if it exists
+        if "linemodel" in base_header0:
+            # Try to remove '+linemodel' or 'linemodel+' cleanly, then any remaining 'linemodel'
+            header0 = (
+                base_header0.replace("+linemodel", "")
+                .replace("linemodel+", "")
+                .replace("linemodel", "")
+            )
+        else:
+            header0 = base_header0
 
     final_lines = [header0, header1] + body_renumbered
     outp.write_text("\n".join(final_lines) + "\n", encoding="utf-8")
@@ -189,7 +215,7 @@ to_delete = [
     "spec_0.dat",
     "set_line_parameters_.sl",
     "set_line_model_.sl",   # if you also want this removed
-    "stat_diff.txt"     # only if you want to remove this too
+    "stat_diff.txt"         # only if you want to remove this too
 ]
 
 for fname in to_delete:
